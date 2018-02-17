@@ -1,0 +1,236 @@
+---
+title: "German Credit Data - Risk Analysis using Logistic Regression"
+author: "Anumeha Dwivedi"
+date: "4 February 2018"
+output: rmarkdown::github_document
+---
+
+###Loading libraries
+```{r, message=FALSE, warning=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+library(Hmisc)
+library(corrplot)
+library(leaps)
+library(glmnet)
+library(ROCR)
+library(verification)
+library(psych)
+```
+
+###Exploratory Data Analysis (EDA) and Data Pre-processing
+```{r, message=FALSE, warning=FALSE}
+cc_data <- read_csv("/Users/tinycloud/Documents/Spring 18/Data Mining 1/Data/German_Credit_Card_Data.csv")
+num_var <- c(2,5,8,11,13,16,18)
+factor_var <- c(1,3,4,6,7,9,10,12,14,15,17,19,20,21)
+cc_data[,factor_var] <- lapply(cc_data[,factor_var] , factor)
+cc_data[num_var] <- sapply(cc_data[num_var] , as.numeric)
+summary(cc_data[factor_var])
+```
+
+```{r, fig.height=10, fig.width=6, message=FALSE, warning=FALSE}
+par(mfrow = c(4,2))
+hist(cc_data$Duration, freq = FALSE)
+lines(density(cc_data$Duration), col= "blue")
+hist(cc_data$`Credit Amount`, probability = TRUE)
+lines(density(cc_data$`Credit Amount`), col= "blue")
+hist(cc_data$Installmant_rate, probability = TRUE)
+lines(density(cc_data$Installmant_rate), col= "blue")
+hist(cc_data$Present_residence, probability = TRUE)
+lines(density(cc_data$Present_residence), col= "blue")
+hist(cc_data$Age, probability = TRUE)
+lines(density(cc_data$Age), col= "blue")
+hist(cc_data$`No of credits`, probability = TRUE)
+lines(density(cc_data$`No of credits`), col= "blue")
+hist(cc_data$`Liable people`, probability = TRUE)
+lines(density(cc_data$`Liable people`), col= "blue")
+
+par(mfrow = c(4,4))
+barplot(table(cc_data$Existing_checking_account))
+barplot(table(cc_data$Credit_history))
+barplot(table(cc_data$Purpose))
+barplot(table(cc_data$`Savings account`))
+barplot(table(cc_data$`Present employment since`))
+barplot(table(cc_data$`Personal status and Tax`))
+barplot(table(cc_data$`Other debtors / guarantors`))
+barplot(table(cc_data$Property))
+barplot(table(cc_data$`Other installment plans`))
+barplot(table(cc_data$Housing))
+barplot(table(cc_data$Job))
+barplot(table(cc_data$Telephone))
+barplot(table(cc_data$`Foreign Worker`))
+barplot(table(cc_data$Default))
+```
+
+###Splitting into test and train
+```{r, message=FALSE, warning=FALSE}
+set.seed(12363925)
+index <- sample(1:nrow(cc_data), 0.8*nrow(cc_data))
+train <- cc_data[index,]
+test <- cc_data[-index,]
+```
+
+###Trying different link functions
+```{r, message=FALSE, warning=FALSE, results='hide'}
+log.fit <- glm(Default ~ Existing_checking_account + Duration + Credit_history + Purpose + 
+                  `Credit Amount` + `Savings account` + Installmant_rate + `Other debtors / guarantors` 
+                + `Other installment plans` + `No of credits` + Telephone + `Foreign Worker`, 
+                data = train, family = binomial)
+
+log.fit.probit <- glm(Default ~ Existing_checking_account + Duration + Credit_history + Purpose + 
+                 `Credit Amount` + `Savings account` + Installmant_rate + `Other debtors / guarantors` 
+               + `Other installment plans` + `No of credits` + Telephone + `Foreign Worker`, 
+               data = train, family = binomial(link = "probit"))
+
+log.fit.cloglog <- glm(Default ~ Existing_checking_account + Duration + Credit_history + Purpose + 
+                 `Credit Amount` + `Savings account` + Installmant_rate + `Other debtors / guarantors` 
+               + `Other installment plans` + `No of credits` + Telephone + `Foreign Worker`, 
+               data = train, family = binomial(link = "cloglog"))
+
+summary(log.fit)
+summary(log.fit.probit)
+summary(log.fit.cloglog)
+```
+
+####Comparing AIC and BIC for the models with different links
+```{r, message=FALSE, warning=FALSE}
+AIC(log.fit)
+AIC(log.fit.probit)
+AIC(log.fit.cloglog)
+
+BIC(log.fit)
+BIC(log.fit.probit)
+BIC(log.fit.cloglog)
+```
+
+###Hit rates and ROC curves for the 3 links on training data
+```{r, message=FALSE, warning=FALSE}
+log_train_pred <- predict(log.fit, type = "response")
+prob_train_log <- ifelse(log_train_pred > 0.5, 2, 1)
+mean(prob_train_log == train$Default) 
+probit_train_pred <- predict(log.fit.probit, type = "response")
+prob_train_probit <- ifelse(probit_train_pred > 0.5, 2, 1)
+mean(prob_train_probit == train$Default)
+cloglog_train_pred <- predict(log.fit.cloglog, type = "response")
+prob_train_cloglog <- ifelse(cloglog_train_pred > 0.5, 2, 1)
+mean(prob_train_cloglog == train$Default)
+
+roc.plot(x = train$Default == "2", pred = cbind(log_train_pred, probit_train_pred,cloglog_train_pred), 
+         legend = TRUE, leg.text = c("logit", "Probit", "cloglog"))$roc.vol
+```
+
+###Hit rates and ROC curves for the 3 links on test data
+```{r, message=FALSE, warning=FALSE}
+log_test_pred <- predict(log.fit, newdata = test, type = "response")
+prob_test_log <- ifelse(log_train_pred > 0.5, 2, 1)
+mean(prob_test_log == test$Default)
+probit_test_pred <- predict(log.fit.probit, newdata = test, type = "response")
+prob_test_probit <- ifelse(probit_train_pred > 0.5, 2, 1)
+mean(prob_test_probit == test$Default)
+cloglog_test_pred <- predict(log.fit.cloglog, newdata = test, type = "response")
+prob_test_cloglog <- ifelse(cloglog_train_pred > 0.5, 2, 1)
+mean(prob_test_cloglog == test$Default)
+
+roc.plot(x = test$Default == "2", pred = cbind(log_test_pred, probit_test_pred,cloglog_test_pred), 
+         legend = TRUE, leg.text = c("logit", "Probit", "cloglog"))$roc.vol
+```
+
+###Variable selection - step AIC, step BIC and LASSO
+```{r, message=FALSE, warning=FALSE, results='hide'}
+null.model <- glm(Default ~ 1, data = train, family = "binomial")
+logstepAIC <- step(null.model, scope = list(lower=null.model, upper=log.fit), k = 2, direction="both")
+logstepBIC <- step(null.model, scope = list(lower=null.model, upper=log.fit), direction = "both", 
+                   k = log(nrow(train)))
+
+##Lasso
+cc_data_scale <- cc_data
+cc_data_scale[num_var] <- scale(cc_data_scale[num_var])
+cc_data_scale[factor_var] <- sapply(cc_data[factor_var] , as.numeric)
+X.train<- as.matrix(cc_data_scale)[index,1:20]
+X.test<-  as.matrix(cc_data_scale)[-index,1:20]
+Y.train <- cc_data_scale$Default[index]
+Y.test <- cc_data_scale$Default[-index]
+lasso_fit <- glmnet(x = X.train ,y = Y.train ,alpha = 1 , family = "binomial")
+cv.out <- cv.glmnet(x = X.train ,y = Y.train ,alpha = 1 , family = "binomial" ,type.measure = "mse")
+plot(cv.out, xvar = "lambda", label=TRUE)
+#min value of lambda
+lambda_min <- cv.out$lambda.min
+#best value of lambda
+lambda_1se <- cv.out$lambda.1se
+#regression coefficients
+coef(cv.out,s=lambda_1se)
+
+logstepAIC$anova
+logstepBIC$anova
+coef(cv.out,s=lambda_1se)
+
+AIC(logstepAIC)
+AIC(logstepBIC)
+
+BIC(logstepAIC)
+BIC(logstepBIC)
+```
+
+###Model selection
+```{r, message=FALSE, warning=FALSE}
+stepAICpred <- predict(logstepAIC, type = "response")
+prob_train_AIC <- ifelse(stepAICpred > 0.5, 2, 1)
+mean(prob_train_AIC == train$Default)
+stepBICpred <- predict(logstepBIC, type = "response")
+prob_train_BIC <- ifelse(stepBICpred > 0.5, 2, 1)
+mean(prob_train_BIC == train$Default)
+lasso_prob_train <- predict(cv.out, newx = X.train, s = lambda_1se, type = "response")
+prob_train_lasso <- ifelse(lasso_prob_train > 0.5, 2, 1)
+mean(prob_train_lasso == train$Default)
+
+roc.plot(x = train$Default == "2", pred = cbind(stepAICpred, stepBICpred, lasso_prob_train), 
+         legend = TRUE, leg.text = c("Step AIC", "Step BIC", "LASSO"))$roc.vol
+
+stepAICpred <- predict(logstepAIC, newdata = test, type = "response")
+prob_test_AIC <- ifelse(stepAICpred > 0.5, 2, 1)
+mean(prob_test_AIC == test$Default)
+stepBICpred <- predict(logstepBIC, newdata = test, type = "response")
+prob_test_BIC <- ifelse(stepBICpred > 0.5, 2, 1)
+mean(prob_test_BIC == test$Default)
+lasso_prob_test <- predict(cv.out, newx = X.test, s = lambda_1se, newdata = test, type = "response")
+prob_test_lasso <- ifelse(lasso_prob_test > 0.5, 2, 1)
+mean(prob_test_lasso == test$Default)
+
+roc.plot(x = test$Default == "2", pred = cbind(stepAICpred, stepBICpred, lasso_prob_test), 
+         legend = TRUE, leg.text = c("Step AIC", "Step BIC", "LASSO"))$roc.vol
+```
+
+###Finding Optimal Probability
+```{r, message=FALSE, warning=FALSE}
+logstepAIC
+
+searchgrid = seq(0.01, 0.99, 0.01)
+result = cbind(searchgrid, NA)
+
+# in the cost function, both r and pi are vectors, r=truth, pi=predicted probability
+cost1 <- function(r, pi) 
+{
+  weight1 = 5
+  weight0 = 1
+  c1 = (r == 2) & (pi < pcut)  #logical vector - true if actual 1 but predict 0
+  c0 = (r == 1) & (pi > pcut)  #logical vecotr - true if actual 0 but predict 1
+  return(mean(weight1 * c1 + weight0 * c0))
+}
+
+for (i in 1:length(searchgrid)) 
+{
+  pcut <- result[i, 1]
+  # assign the cost to the 2nd col
+  result[i, 2] <- cost1(train$Default, predict(logstepAIC, type = "response"))
+}
+
+plot(result, ylab = "Cost in Training Set", col = "red")
+result[which(result[,2] == min(result[,2])),]
+
+final_model <- glm(Default ~ Existing_checking_account + Duration + Credit_history + Purpose + 
+                         `Credit Amount` + `Savings account` + Installmant_rate + `Other debtors / guarantors` 
+                       + `Other installment plans` + `No of credits` + Telephone + `Foreign Worker`, 
+                       data = cc_data, family = binomial)
+```

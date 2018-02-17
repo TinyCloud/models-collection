@@ -1,0 +1,84 @@
+---
+title: "Multiple Linear Regression - Prestige dataset"
+author: "Anumeha Dwivedi"
+date: "5 January 2018"
+output: rmarkdown::github_document
+---
+
+###Loading libraries
+```{r Loading Libraries, message=FALSE, warning=FALSE}
+library(car)
+library(ggplot2)
+library(dplyr)
+library(GGally)
+```
+
+###Getting familiar with the dataset
+```{r Getting Familiar with dataset, message=FALSE, warning=FALSE, results='hide'}
+str(Prestige) #Dataset from car package
+head(Prestige)
+summary(Prestige)
+
+colSums(is.na(Prestige))
+prestige <- na.omit(Prestige)
+colSums(is.na(prestige))
+```
+
+
+###Correlation and basic plots
+```{r Getting Coorelation and basic plots, message=FALSE, warning=FALSE}
+ggpairs(prestige[1:5])
+plot(prestige$type, prestige$income)
+
+ggplot(data = prestige, aes(x = prestige, y = income)) +
+  geom_smooth()
+
+ggplot(data = prestige, aes(x = women, y = income)) +
+  geom_smooth()
+
+ggplot(data = prestige, aes(x = prestige, y = income, col = type)) +
+  geom_smooth()
+```
+
+
+###Splitting into test and train sets
+```{r Splitting in test and train, message=FALSE, warning=FALSE}
+set.seed(1)
+index <- sample(1:nrow(prestige), nrow(prestige)*0.8)
+train <- prestige[index,]
+test <- prestige[-index,]
+```
+
+
+###Full model
+```{r Building model with all parameters, message=FALSE, warning=FALSE}
+lm.fit <- lm(income ~., data = prestige)
+summary(lm.fit)
+```
+
+We see that education is highly correlated with prestige and census both so let's make a model droppping education and census (as prestige is already being included), to avoid multicollinearity issues.
+
+###Model with 2 parameters
+```{r Building model with imp parameters, message=FALSE, warning=FALSE}
+lm.fit2 <- lm(income ~ women + prestige, data = prestige)
+summary(lm.fit2)
+plot(lm.fit2, pch=16, which=1)
+```
+
+###Transformation and final model
+Looking at the residual plots, it seems that taking a log transformation of income might be helpful and we can predict it using women and prestige variables.
+```{r Building model with square terms, message=FALSE, warning=FALSE}
+lm.fit3 <- lm(log(income) ~ women + prestige, data = prestige)
+summary(lm.fit3)
+plot(lm.fit3)
+```
+
+###Prediction on test data
+Our adjusted R-square is 0.787 and F-statistic is 180.2. This means we now have a model with good precision, so let us predict the income on our test dataset and see.
+```{r Prediction, message=FALSE, warning=FALSE}
+test$y <- predict(lm.fit3, newdata = test)
+plot(test$income, exp(test$y))
+sqrt(mean(sum((exp((test$y-mean(test$y))/sd(test$y)) - ((test$income-mean(test$income))/sd(test$income)))^2)))
+```
+
+The plot is decently linear so we have predicted values in close proximity of actual test values. The RMSE for scaled target variable is as low as 9.9. 

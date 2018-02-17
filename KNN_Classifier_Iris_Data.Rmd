@@ -1,0 +1,72 @@
+---
+title: "Using KNN for Classification"
+author: "Anumeha Dwivedi"
+date: "10 January 2018"
+output: rmarkdown::github_document
+---
+
+###Loading Libraries
+```{r Loading Libraries, message=FALSE, warning=FALSE}
+library(class)
+library(ggplot2)
+library(gmodels)
+library(GGally)
+```
+
+
+###Understanding Data
+```{r Understanding Data, message=FALSE, warning=FALSE}
+str(iris)
+summary(iris)
+ggpairs(iris)
+```
+
+
+###Data Visualization
+```{r Visualization, message=FALSE, warning=FALSE}
+ggplot(data = iris, aes(x = Sepal.Length, y = Sepal.Width, col = Species)) +
+  geom_point()
+
+ggplot(data = iris, aes(x = Petal.Length, y = Petal.Width, col = Species)) +
+  geom_point()
+```
+
+
+###Scaling the data
+```{r Scaling, message=FALSE, warning=FALSE}
+scale_iris <- iris
+scale_iris[,1:4] <- scale(iris[,1:4])
+```
+
+
+###Splitting training and test sets
+```{r, message=FALSE, warning=FALSE}
+set.seed(123)
+index <- sample(1:nrow(scale_iris), nrow(scale_iris)*0.6)
+iris_train <- scale_iris[index,]
+iris_test <- scale_iris[-index,]
+```
+
+###KNN Model
+```{r Applying KNN for multiple values of K, message=FALSE, warning=FALSE}
+error <- c()
+for (i in 1:15)
+{
+  knn.fit <- knn(train = iris_train[,1:4], test = iris_test[,1:4], cl = as.factor(iris_train$Species), k = i)
+  error[i] = 1- mean(knn.fit == iris_test$Species)
+}
+
+ggplot(data = data.frame(error), aes(x = 1:15, y = error)) +
+  geom_line(color = "Blue")
+```
+
+We see that for K = 5, we have the smallest error 
+
+###Checking accuracy of the final model
+```{r Checking Accuracy, message=FALSE, warning=FALSE}
+knn.fit <- knn(train = iris_train[,1:4], test = iris_test[,1:4], cl = as.factor(iris_train$Species), k = 5)
+
+CrossTable(x = iris_test$Species, y = knn.fit,prop.chisq=FALSE) 
+```
+
+From the above matrix, we see that all our classification for Setosa is correct, we have classified 1 Virginica as Versicolor and 2 Versicolor as Virginica. Overall the accurcy of our model is 57/60 = 95%.

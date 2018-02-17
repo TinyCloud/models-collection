@@ -1,0 +1,199 @@
+---
+title: "Introduction to Support Vector Machines - Heart Disease Detection"
+author: "Anumeha Dwivedi"
+date: "11 January 2018"
+output: rmarkdown::github_document
+---
+
+###Loading Packages
+```{r Loading Packages, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(e1071)
+library(caret)
+```
+
+###Understanding the data
+```{r Loading and Understanding Data, message=FALSE, warning=FALSE}
+heart <- read.csv("/Users/tinycloud/Documents/Spring 18/Data Mining 1/Data/heart_tidy_svm.csv")
+colnames(heart) <- c("age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", "thalach", "exaang", "oldpeak", "slope", "ca", "thal", "class")
+
+colSums(is.na(heart))
+str(heart)
+head(heart)
+
+heart$class <- as.factor(heart$class)
+```
+
+###Bar plot
+```{r Plots, message=FALSE, warning=FALSE}
+ggplot(data = heart, aes(x = class, fill = class)) +
+  geom_bar()
+```
+
+###Test & train split
+```{r Splitting Data into test and train, message=FALSE, warning=FALSE}
+set.seed(123)
+index = sample(1:nrow(heart), .7*nrow(heart))
+train <- heart[index,]
+test <- heart[-index,]
+```
+
+
+###Linear SVM Model
+###{.tabset .tabset-fade .tabset-pills}
+####Model fit for different values of cost 
+```{r linear SVM, message=FALSE, warning=FALSE}
+accuracy <- c()
+j <- 1
+cost <- c(0.001,.01, .05, .1, .2, .5, 1, 2,5)
+
+for (i in cost)
+{
+  svm.linear <- svm(class ~ ., data = train, kernel = "linear", cost = i)
+  test$pred <- predict(svm.linear, newdata = test)
+  accuracy[j] = mean(test$pred == test$class)
+  j <- j + 1
+}
+
+ggplot(data = data.frame(accuracy,cost), aes(x = cost, y = accuracy)) +
+  geom_point()
+```
+
+From the plot, we see that our model has the best accuracy when cost = 0.05 or 0.01
+
+####Confusion Matrix for Linear SVM
+```{r Confusion Matrix for Linear SVM, message=FALSE, warning=FALSE}
+svm.linear <- svm(class ~ ., data = train, kernel = "linear", cost = .01)
+test$pred <- predict(svm.linear, newdata = test)
+confusionMatrix(test$pred, test$class)
+```
+
+###Polynomial SVM
+###{.tabset .tabset-fade .tabset-pills}
+####Model fit for varying degrees, keeping cost at 0.05
+```{r Polynomial SVM, message=FALSE, warning=FALSE}
+accuracy <- c()
+degree <- c(1,2,3,4,5,6)
+c <- 0.05
+j <- 1
+
+for (i in degree)
+{
+  svm.poly <- svm(class ~., data = train, kernel = "polynomial", degree = i, cost = c)
+  test$pred <- predict(svm.poly, newdata = test)
+  accuracy[j] <- mean(test$pred == test$class)
+  j <- j + 1
+}
+
+ggplot(data = data.frame(accuracy,degree), aes(x = degree, y = accuracy)) +
+  geom_point()
+```
+
+For cost = 0.05, we get the higest accuracy when degree = 1 and followed by degree = 3. We know that degree = 1 implies a linear model so let us try a different model with varying cost with constant degree of 3.
+
+####Model fit for varying cost keeping degree = 3
+```{r, message=FALSE, warning=FALSE}
+accuracy <- c()
+cost <- c(0.001,.01, .05, .1, .2, .5, 1, 2,5)
+j <- 1
+
+for (i in cost)
+{
+  svm.poly <- svm(class ~., data = train, kernel = "polynomial", degree = 3, cost = i)
+  test$pred <- predict(svm.poly, newdata = test)
+  accuracy[j] <- mean(test$pred == test$class)
+  j <- j + 1
+}
+
+ggplot(data = data.frame(accuracy,cost), aes(x = cost, y = accuracy)) +
+  geom_point()
+```
+In polynomial SVM, we get our best fit for degree 3 when cost = 0.5
+
+####Confusion Matrix for Polynomial SVM
+```{r Confusion Matrix for Polynomial SVM, message=FALSE, warning=FALSE}
+svm.poly <- svm(class ~., data = train, kernel = "polynomial", degree = 3, cost = 0.5)
+test$pred <- predict(svm.poly, newdata = test)
+confusionMatrix(test$pred, test$class)
+```
+We see that our accuracy for polynomial SVM is almost equal to that of linear SVM. 
+
+
+###Radial SVM
+###{.tabset .tabset-fade .tabset-pills}
+####Model fit for varying gamma and cost 
+```{r, message=FALSE, warning=FALSE}
+accuracy <- c(0)
+cost <- c(0.001,.01, .05, .1, .2, .5, 1, 2,5)
+gamma <- c(10^-6,10^-5,10^-4,10^-3,10^-2,10^-1,10^0,10^1,10^2,10^3)
+j <- 1
+
+for (i in cost)
+{
+  for (k in gamma)
+  {
+    svm.radial <- svm(class ~., data = train, kernel = "radial", gamma = k, cost = i)
+    test$pred <- predict(svm.radial, newdata = test)
+    accuracy[j] <- mean(test$pred == test$class)
+    if(accuracy[j] >= max(accuracy))
+    {
+      des_gamma <- k
+      des_cost <- i
+    }
+    j <- j + 1
+  }
+}
+
+des_gamma
+des_cost
+
+```
+We get our highest accuracy at gamma = 0.001 and cost = 0.2. It is observed that higher penalty is desirable in radial model as compared to linear model.
+
+####Confusion Matrix for Radial SVM
+```{r Confusion Matrix for Radial SVM, message=FALSE, warning=FALSE}
+svm.radial <- svm(class ~., data = train, kernel = "radial", gamma = .001, cost = 2)
+test$pred <- predict(svm.radial, newdata = test)
+confusionMatrix(test$pred, test$class)
+```
+
+###Sigmoid SVM
+###{.tabset .tabset-fade .tabset-pills}
+####Model Fit for varying Gamma and cost 
+```{r, message=FALSE, warning=FALSE}
+accuracy <- c(0)
+cost <- c(0.001,.01, .05, .1, .2, .5, 1, 2,5)
+gamma <- c(10^-6,10^-5,10^-4,10^-3,10^-2,10^-1,10^0,10^1,10^2,10^3)
+j <- 1
+
+for (i in cost)
+{
+  for (k in gamma)
+  {
+    svm.sigmoid <- svm(class ~., data = train, kernel = "sigmoid", gamma = k, cost = i)
+    test$pred <- predict(svm.sigmoid, newdata = test)
+    accuracy[j] <- mean(test$pred == test$class)
+    if(accuracy[j] >= max(accuracy))
+    {
+      des_gamma <- k
+      des_cost <- i
+    }
+    j <- j + 1
+  }
+}
+
+des_gamma
+des_cost
+```
+We get our highest accuracy at gamma = 0.001 and cost = 5. It is observed that higher penalty is desirable in sigmoid model as compared to linear or even a radial model for that matter.
+
+####Confusion Matrix for Sigmoid SVM
+```{r Confusion Matrix for Sigmoid SVM, message=FALSE, warning=FALSE}
+svm.sigmoid <- svm(class ~., data = train, kernel = "sigmoid", gamma = .001, cost = 5)
+test$pred <- predict(svm.sigmoid, newdata = test)
+confusionMatrix(test$pred, test$class)
+```
+
+###Model comparison
+Overall, we get our highest accuracy with a radial model (accuracy = 86.67% with cost = 2 and gamma = 0.001)
